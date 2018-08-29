@@ -1,0 +1,85 @@
+set version 15.1F5.15
+set system host-name MX5T-51
+set system time-zone Asia/Tokyo
+set system root-authentication encrypted-password "$1$ucymv4Bk$i7R91GNKJIgpLwc8QHooQ1"
+set system name-server 210.188.224.10
+set system name-server 210.188.224.11
+set system scripts op file checkcrc.slax
+set system login class super-user-local idle-timeout 360
+set system login user admin uid 2001
+set system login user admin class super-user
+set system login user admin authentication encrypted-password "$1$VHtLHA71$RuffIHTp6Q9AtKMel2SO0."
+set system services ftp
+set system services telnet
+set system syslog user * any emergency
+set system syslog host 192.168.11.23 any any
+set system syslog host 192.168.11.23 interactive-commands none
+set system syslog file messages any any
+set system syslog file messages authorization info
+set system syslog file messages interactive-commands none
+set system syslog file interactive-commands interactive-commands any
+set system syslog source-address 192.168.11.51
+set system ntp boot-server 192.168.11.1
+set system ntp server 192.168.11.1
+set system ntp server 192.168.11.7
+set chassis fpc 0 pic 0 tunnel-services
+set chassis fpc 1 pic 1 tunnel-services
+set chassis tfeb slot 0
+set interfaces ge-1/0/0 vlan-tagging
+set interfaces ge-1/0/0 unit 0 vlan-id 1
+set interfaces ge-1/0/0 unit 0 family inet
+set interfaces ge-1/0/0 unit 21 description IF-vSRX2a
+set interfaces ge-1/0/0 unit 21 vlan-id 21
+set interfaces ge-1/0/0 unit 21 family inet address 10.0.21.2/30
+set interfaces ge-1/0/0 unit 21 family iso
+set interfaces ge-1/0/0 unit 23 description IF-vSRX2c
+set interfaces ge-1/0/0 unit 23 vlan-id 23
+set interfaces ge-1/0/0 unit 23 family inet address 10.0.23.1/30
+set interfaces ge-1/0/0 unit 23 family iso
+set interfaces ge-1/0/0 unit 121 description IF-vSRX1b
+set interfaces ge-1/0/0 unit 121 vlan-id 121
+set interfaces ge-1/0/0 unit 121 family inet address 10.0.121.2/30
+set interfaces ge-1/0/0 unit 231 description IF-vSRX3b
+set interfaces ge-1/0/0 unit 231 vlan-id 231
+set interfaces ge-1/0/0 unit 231 family inet address 10.0.231.1/30
+set interfaces fxp0 unit 0 family inet address 192.168.11.51/24
+set interfaces lo0 unit 0 family inet address 10.0.2.2/32
+set interfaces lo0 unit 0 family iso address 49.0002.0192.0168.1222.00
+set routing-options static route 10.0.2.0/24 discard
+set routing-options static route 10.0.2.0/24 tag 2
+set routing-options flow term-order standard
+set routing-options router-id 10.0.2.2
+set routing-options autonomous-system 2
+set routing-options forwarding-table export ECMP
+set protocols bgp path-selection always-compare-med
+set protocols bgp group e1 type external
+set protocols bgp group e1 export ps-nhs
+set protocols bgp group e1 neighbor 10.0.121.1 local-address 10.0.121.2
+set protocols bgp group e1 neighbor 10.0.121.1 peer-as 1
+set protocols bgp group e3 type external
+set protocols bgp group e3 export ps-nhs
+set protocols bgp group e3 neighbor 10.0.231.2 local-address 10.0.231.1
+set protocols bgp group e3 neighbor 10.0.231.2 peer-as 3
+set protocols bgp group rrc type internal
+set protocols bgp group rrc local-address 10.0.2.2
+set protocols bgp group rrc export ps-nhs
+set protocols bgp group rrc cluster 10.0.2.2
+set protocols bgp group rrc neighbor 10.0.2.1 family inet unicast add-path send path-count 6
+set protocols bgp group rrc neighbor 10.0.2.1 family inet flow no-validate ps-accept
+set protocols isis level 1 disable
+set protocols isis interface ge-1/0/0.21
+set protocols isis interface ge-1/0/0.23
+set protocols isis interface ge-1/0/0.121 passive
+set protocols isis interface ge-1/0/0.231 passive
+set protocols isis interface lo0.0
+set policy-options policy-statement ECMP then load-balance per-packet
+set policy-options policy-statement ps-accept then accept
+set policy-options policy-statement ps-nhs term 1 from protocol static
+set policy-options policy-statement ps-nhs term 1 from tag 2
+set policy-options policy-statement ps-nhs term 1 then next-hop self
+set policy-options policy-statement ps-nhs term 1 then accept
+set policy-options policy-statement ps-nhs term 10 from protocol bgp
+set policy-options policy-statement ps-nhs term 10 then next-hop self
+set policy-options policy-statement ps-nhs term 10 then accept
+set policy-options policy-statement ps-nhs term 999 then reject
+set policy-options policy-statement ps-reject then reject
