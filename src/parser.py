@@ -2,10 +2,12 @@ import pdb
 from collections import OrderedDict
 import traceback
 
+from src.h_logger import HLogger
+
 class Parser(object):
-    def __init__(self, logger):
-        self.logger = logger
-    
+    def __init__(self):
+        self.logger = HLogger(__name__)
+        
     def init_objects_from_list(self, int_index, lst_lines, dict_init_options, **kwargs):
         """
          lst_src = [["","",""],["","",""]]

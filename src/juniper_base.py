@@ -7,17 +7,18 @@ from src.parser import Parser
 
 
 class Interface(object):
-    def __init__(self, name, logger):
+    def __init__(self, name):
         self.name = name
-        self.logger = logger
-        self.parser = Parser(logger)
-        
+        self.parser = Parser()
+        self.units = []    
+          
     def init_from_list(self, int_index, lst_src, **kwargs):
         dict_init_options = self.get_dict_init_options()
         dict_ret = self.parser.init_objects_from_list(
-             int_index, lst_src, dict_init_options, **kwargs) 
+             int_index, lst_src, dict_init_options, **kwargs)
 
     def get_dict_init_options(self):
+        #Each interface can edit this option to manipulate the inited objects
         dict_ret ={
                 "unit": self.init_unit_from_list,
                 "vlan-tagging": self.init_vlan_tagging_from_list
@@ -35,27 +36,60 @@ class Interface(object):
     
     def init_unit_from_list(self, int_index, lst_src, **kwargs):
         dict_ret = self.parser.init_objects_from_list(int_index, lst_src, {}, **kwargs)
-        pdb.set_trace()
+        for str_unit_name, lst_lines in dict_ret.items():
+            unit = Interface.Unit(str_unit_name)
+            unit.init_from_list(int_index+1, lst_lines, **kwargs)
+            self.units.append(unit)
+    
+    class Unit(object):
+        def __init__(self, name):
+            self.name = name
+            self.parser = Parser()
+            
+        def init_from_list(self, int_index, lst_src, **kwargs):
+            dict_ret = self.parser.init_objects_from_list(
+                int_index, lst_src, {}, **kwargs)
+            pdb.set_trace()
         
     
 class InterfaceLo(Interface):
-    pass
+    def __init__(self, name):
+        super().__init__(name)
     
     
 class InterfaceFXP(Interface):
-    pass        
+    def __init__(self, name):
+        super().__init__(name)
 
     
 class InterfaceGE(Interface):
-    def __init__(self, name, logger):
-        super().__init__(name, logger)
+    def __init__(self, name):
+        super().__init__(name)
 
+        
+class InterfaceGR(Interface):
+    def __init__(self, name):
+        super().__init__(name)
+        
+        
+class InterfaceXE(Interface):
+    def __init__(self, name):
+        super().__init__(name)
+
+        
+class InterfaceAE(Interface):
+    def __init__(self, name):
+        super().__init__(name)
+        
+        
+class InterfaceME(Interface):
+    def __init__(self, name):
+        super().__init__(name)
         
     
 class JuniperBase(object):
-    def __init__(self, logger):
-        self.logger = logger
-        self.parser = Parser(logger)
+    def __init__(self):
+        self.parser = Parser()
     
     def init_from_list(self, lst_src, int_index=1):
         self.lst_src = lst_src
@@ -81,7 +115,6 @@ class JuniperBase(object):
         lst_src = lst_src[0]
         self.version = lst_src[2]
         
-    
     def init_groups_from_list(self, lst_src):
         pdb.set_trace()
     
@@ -112,7 +145,7 @@ class JuniperBase(object):
             pdb.set_trace()
             raise Exception
         
-        interface = cls_inter(str_name, self.logger)
+        interface = cls_inter(str_name)
         interface.init_from_list(int_index, lst_lines)
         
     def init_snmp_from_list(self, lst_src):
@@ -143,6 +176,10 @@ class JuniperBase(object):
         LO = InterfaceLo
         FXP = InterfaceFXP
         GE = InterfaceGE
+        XE = InterfaceXE
+        GR = InterfaceGR
+        AE = InterfaceAE
+        ME = InterfaceME
         
     
     
