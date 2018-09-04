@@ -48,10 +48,25 @@ class Interface(object):
             
         def init_from_list(self, int_index, lst_src, **kwargs):
             dict_ret = self.parser.init_objects_from_list(
-                int_index, lst_src, {}, **kwargs)
+                int_index, lst_src, {
+                "clear-dont-fragment-bit": self.init_default_from_list,
+                "description": self.init_default_from_list,
+                "tunnel": self.init_tunnel_from_list,
+                "family": self.init_family_from_list,
+                }, 
+                **kwargs)
             pdb.set_trace()
-        
-    
+            
+        def init_default_from_list(self, int_index, lst_src, **kwargs):
+            pdb.set_trace()
+
+        def init_family_from_list(self, int_index, lst_src, **kwargs):
+            pdb.set_trace()
+            
+        def init_tunnel_from_list(self, int_index, lst_src, **kwargs):
+            pdb.set_trace()
+            
+            
 class InterfaceLo(Interface):
     def __init__(self, name):
         super().__init__(name)
