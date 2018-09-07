@@ -6,11 +6,11 @@ sys.path.insert(0, "..")
 
 from src.h_logger import HLogger
 from src.parser import Parser
-from src.juniper_base import JuniperBase
+from src.juniper_base import JuniperBaseDevice
 
 HLogger(__name__)
 
-dev = JuniperBase()
+dev = JuniperBaseDevice()
 #with open("mx_s/mx_1.txt") as f:
 with open("../private_files/mx_.txt") as f:
     str_lines = f.read()
