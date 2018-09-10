@@ -133,12 +133,17 @@ class Interface(object):
                 dict_ret = self.parser.init_objects_from_list(
                 int_index, lst_src, {
                 "inet": self.init_inet_from_list,
+                "inet6": self.init_inet6_from_list,
                 }, 
                 **kwargs)
                 
                 if dict_ret:
                     pdb.set_trace()
                 
+            def init_inet6_from_list(self, int_index, lst_src, **kwargs):
+                self.protocol = Interface.Unit.Family.Inet()
+                self.protocol.init_from_list(int_index, lst_src, **kwargs)            
+            
             def init_inet_from_list(self, int_index, lst_src, **kwargs):
                 self.protocol = Interface.Unit.Family.Inet()
                 self.protocol.init_from_list(int_index, lst_src, **kwargs)
@@ -146,7 +151,7 @@ class Interface(object):
             class Inet:
                 def __init__(self):
                     self.mtu = None
-                    self.address = None
+                    self.addresses = []
                     self.parser = Parser()
                 
                 def init_from_list(self, int_index, lst_src, **kwargs):
@@ -169,7 +174,6 @@ class Interface(object):
                         
                     self.mtu = lst_src[0][int_index]
 
-                
                 def init_address_from_list(self, int_index, lst_src, **kwargs):
                     dict_ret = self.parser.init_objects_from_list(
                     int_index, lst_src, {}, 
