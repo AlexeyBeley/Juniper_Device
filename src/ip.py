@@ -1,4 +1,5 @@
 import pdb
+import re
 
 from enum import Enum
 
@@ -107,17 +108,17 @@ class IP:
         
     @staticmethod
     def check_ipv6_validity(str_src):
-        str_long_address = IP.convert_short_to_long_ipv6(str_src)
-        lst_src = str_src.split(":")
-        pdb.set_trace()
-        if len(lst_src) != 4:
+        lst_long_address = IP.convert_short_to_long_ipv6(str_src)
+        if len(lst_long_address) != 8:
             return False
         
         try:
-            for str_oct in lst_src:
-                int_oct = int(str_oct)
-                if int_oct < 0 or int_oct > 255:
+            for str_part in lst_long_address:
+                pattern = re.compile("^[a-f0-9]{4}$")
+                match_part = re.match(pattern, str_part)
+                if not match_part:
                     return False
+                
         except Exception:
             return False
         

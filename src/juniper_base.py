@@ -6,13 +6,25 @@ from enum import Enum
 from src.ip import IP
 from src.parser import Parser
 
+def preprocess_deactivated_object(func_src):
+    def func_ret(self, int_index, lst_src, **kwargs):
+        for lst_line in lst_src:
+            if lst_line[0] != "set":
+                if lst_line[0] != "deactivate":
+                    raise Exception
+                if len(lst_line) == int_index+1:
+                    pdb.set_trace()
+                    raise Exception
+        func_src(self, int_index, lst_src, **kwargs)
+    return func_ret
 
 class Interface(object):
     def __init__(self, name):
         self.name = name
         self.parser = Parser()
         self.units = []    
-          
+    
+    @preprocess_deactivated_object
     def init_from_list(self, int_index, lst_src, **kwargs):
         dict_init_options = self.get_dict_init_options()
         dict_ret = self.parser.init_objects_from_list(
@@ -25,11 +37,21 @@ class Interface(object):
         #Each interface can edit this option to manipulate the inited objects
         dict_ret ={
                 "unit": self.init_unit_from_list,
-                "vlan-tagging": self.init_vlan_tagging_from_list
+                "vlan-tagging": self.init_vlan_tagging_from_list,
+                "description": self.init_description_from_list,
+                "gigether-options": self.init_gigether_options_from_list,
             }
         return dict_ret
     
-    def init_vlan_tagging_from_list(self, int_src, lst_src, **kwargs):
+    def init_description_from_list(self, int_index, lst_src, **kwargs):
+        self.description = Interface.DescriptionValue()
+        self.description.init_from_list(int_index, lst_src, **kwargs)
+        
+    def init_gigether_options_from_list(self, int_index, lst_src, **kwargs):
+        self.gigether_options = Interface.GigetherOptions()
+        self.gigether_options.init_from_list(int_index, lst_src, **kwargs)
+        
+    def init_vlan_tagging_from_list(self, int_index, lst_src, **kwargs):
         for lst_line in lst_src:
             if lst_line[0] != "set": 
                 raise Interface.InterfaceInitException
@@ -37,7 +59,10 @@ class Interface(object):
             if len(lst_line) > 4:
                 pdb.set_trace()
                 raise Interface.InterfaceInitException
-    
+        
+        self.vlan_tagging= Interface.VlanTagging()
+        self.vlan_tagging.init_from_list(int_index-1, lst_src, **kwargs)
+        
     def init_unit_from_list(self, int_index, lst_src, **kwargs):
         dict_ret = self.parser.init_objects_from_list(int_index, lst_src, {}, **kwargs)
         for str_unit_name, lst_lines in dict_ret.items():
@@ -45,12 +70,60 @@ class Interface(object):
             unit.init_from_list(int_index+1, lst_lines, **kwargs)
             self.units.append(unit)
     
+    class VlanTagging:
+        def __init__(self):
+            self.bool_value = None
+            self.bool_active = False
+        
+        @preprocess_deactivated_object
+        def init_from_list(self, int_index, lst_src, **kwargs):
+            if len(lst_src) != 1:
+                raise Exception
+            
+            self.bool_value = True
+            
+    class DescriptionValue:
+        def __init__(self):
+            self.str_value = None
+            self.bool_active = False
+        
+        @preprocess_deactivated_object
+        def init_from_list(self, int_index, lst_src, **kwargs):
+            if len(lst_src) != 1:
+                raise Exception
+            self.str_value = lst_src[0][int_index]
+    
+    class GigetherOptions:
+        def __init__(self):
+            self.bool_active = True
+            
+        @preprocess_deactivated_object
+        def init_from_list(self, int_index, lst_src, **kwargs):
+            if len(lst_src) != 1:
+                raise Exception
+            if lst_src[0][int_index] != "802.3ad":
+                raise Exception
+            
+            self.protocol_802dot3ad = Interface.GigetherOptions.Protocol802dot3ad()
+            self.protocol_802dot3ad.init_from_list(int_index+1, lst_src, **kwargs)
+            
+        class Protocol802dot3ad:
+            def __init__(self):
+                self.ae_interface = None
+                
+            def init_from_list(self, int_index, lst_src, **kwargs):
+                pdb.set_trace()
+                kwargs["lst_interfaces"]
+                
+                
     class Unit(object):
         def __init__(self, name):
             self.name = name
+            self.vlan_id = None
             self.parser = Parser()
             self.dict_vars_vals = {}
-            
+        
+        @preprocess_deactivated_object
         def init_from_list(self, int_index, lst_src, **kwargs):
             dict_ret = self.parser.init_objects_from_list(
                 int_index, lst_src, {
@@ -58,10 +131,16 @@ class Interface(object):
                 "description": self.init_description_from_list,
                 "tunnel": self.init_tunnel_from_list,
                 "family": self.init_family_from_list,
+                "vlan-id": self.init_vlan_id_from_list,
                 }, 
                 **kwargs)
             if dict_ret:
                 pdb.set_trace()
+            
+        def init_vlan_id_from_list(self, int_index, lst_src, **kwargs):
+            pdb.set_trace()
+            self.vlan_id = Interface.Unit.VlanIdValue()
+            self.vlan_id.init_from_list(int_index, lst_src, **kwargs)
             
         def init_default_from_list(self, int_index, lst_src, **kwargs):
             self.dict_vars_vals[lst_src[0][int_index-1]]= lst_src
@@ -90,7 +169,17 @@ class Interface(object):
             if lst_src[0][0] != "set":
                 raise Interface.InterfaceInitException
                 
-            self.description = lst_src[0][int_index]
+            self.description = Interface.DescriptionValue()
+            self.description.init_from_list(int_index, lst_src, **kwargs)
+        
+        class VlanIdValue:
+            def __init__(self):
+                self.int_value = None
+                self.bool_active = True
+            
+            @preprocess_deactivated_object
+            def init_from_list(self, int_index, lst_src, **kwargs):
+                pdb.set_trace()
         
         class Tunnel:
             def __init__(self):
@@ -128,6 +217,7 @@ class Interface(object):
             def __init__(self):
                 self.parser = Parser()
                 self.protocol = None
+                self.dict_vars_vals = OrderedDict()
             
             def init_from_list(self, int_index, lst_src, **kwargs):
                 dict_ret = self.parser.init_objects_from_list(
@@ -153,12 +243,15 @@ class Interface(object):
                     self.mtu = None
                     self.addresses = []
                     self.parser = Parser()
+                    self.dict_vars_vals = OrderedDict()
                 
                 def init_from_list(self, int_index, lst_src, **kwargs):
                     dict_ret = self.parser.init_objects_from_list(
                     int_index, lst_src, {
                     "mtu": self.init_mtu_from_list,
                     "address": self.init_address_from_list,
+                    "filter": self.init_default_from_list,
+                    "sampling": self.init_default_from_list,
                     }, 
                     **kwargs)
                     
@@ -186,7 +279,11 @@ class Interface(object):
                         address = self.Address()
                         address.init_from_list(int_index, lst_lines, **kwargs)
                         self.addresses.append(address)
-                    
+                
+                def init_default_from_list(self, int_index, lst_src, **kwargs):
+                    for lst_line in lst_src:
+                        self.dict_vars_vals[" ".join(lst_line)] = int_index
+                
                 class Address:
                     def __init__(self):
                         self.ip_address = None
@@ -198,7 +295,12 @@ class Interface(object):
                         ip = IP()
                         ip.init_address(lst_src[0][int_index])
 
-                        
+                    class Address_Value:
+                        def __init__(self):
+                            pass
+                            
+                        def init_from_list(self, lst_src):
+                            pdb.set_trace()
                         
     class InterfaceInitException(Exception):
         pass
@@ -244,7 +346,8 @@ class InterfaceME(Interface):
 class JuniperBaseDevice(object):
     def __init__(self):
         self.parser = Parser()
-    
+        self.interfaces = []
+        
     #def init_deactivated_object(self, 
     #@init_deactivated_object
     def init_from_list(self, lst_src, int_index=1):
@@ -286,10 +389,18 @@ class JuniperBaseDevice(object):
     def init_services_from_list(self, lst_src):
         pdb.set_trace()
     
+    
     def init_interfaces_from_list(self, int_index, lst_src, **kwargs):
         dict_src = self.parser.split_list_to_dict(int_index, lst_src)
+        def func_key(str_src):
+            if str_src.startswith("ae"):
+                return 0
+            return 1
+            
+        lst_ordered_src = sorted(list(dict_src.keys()), key = func_key)
         
-        for str_name, lst_lines in dict_src.items():
+        for str_name in lst_ordered_src:
+            lst_lines = dict_src[str_name]
             self.init_and_append_interface(str_name, int_index+1, lst_lines)
         
     def init_and_append_interface(self, str_name, int_index, lst_lines):
@@ -302,7 +413,8 @@ class JuniperBaseDevice(object):
             raise Exception
         
         interface = cls_inter(str_name)
-        interface.init_from_list(int_index, lst_lines)
+        interface.init_from_list(int_index, lst_lines, lst_interfaces=self.interfaces)
+        self.interfaces.append(interface)
         
     def init_snmp_from_list(self, lst_src):
         pdb.set_trace()
