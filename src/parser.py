@@ -28,18 +28,15 @@ class Parser(object):
         dict_ret = OrderedDict()
         
         for lst_line in lst_src:
-            
+              
             if not lst_line:
                 continue
                 
             if lst_line == ['']:
                 continue
             
-            try:
-                lst_line[int_src]
-            except Exception as inst:
-                pdb.set_trace()
-                raise Exception("todo:")
+            if len(lst_line) <= int_src:
+                continue
             
             if lst_line[int_src] not in dict_ret:
                 dict_ret[lst_line[int_src]] = []
@@ -47,3 +44,25 @@ class Parser(object):
             dict_ret[lst_line[int_src]].append(lst_line)
         
         return dict_ret
+        
+    def get_objects_by_values(self, dict_src, lst_src, int_limit=0):
+        lst_ret = []
+        for obj in lst_src:
+            for str_key, value in dict_src.items():
+                if not hasattr(obj, str_key):
+                    break
+                
+                if getattr(obj, str_key) != value:
+                    break
+                
+            else:
+                lst_ret.append(obj)
+                if int_limit:
+                    if len(lst_ret) == int_limit:
+                        break
+            
+        return lst_ret
+
+        
+        
+        
