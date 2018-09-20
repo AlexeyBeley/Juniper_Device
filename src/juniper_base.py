@@ -111,11 +111,13 @@ class ConfigurationElement:
                     
                 if lst_line[0] != "set":
                     if lst_line[0] != "deactivate":
+                        pdb.set_trace()
                         raise Exception
                     
                     if len(lst_line) == int_index:
                         self.bool_active = False
                         if len(lst_src)-1 != i:
+                            pdb.set_trace()
                             raise Exception
                         lst_src = lst_src[:-1]
                         
@@ -141,6 +143,8 @@ class Interface(object):
         self.name = name
         self.parser = Parser()
         self.units = []    
+        self.bool_active = True
+        self.bool_enabled = True
     
     @ConfigurationElement.preprocess_deactivated_object
     def init_from_list(self, int_index, lst_src, **kwargs):
@@ -149,6 +153,8 @@ class Interface(object):
              int_index, lst_src, dict_init_options, **kwargs)
         
         if dict_ret:
+            for x in dict_ret:
+                print("###"+x)
             pdb.set_trace()
             
     def get_dict_init_options(self):
@@ -157,13 +163,26 @@ class Interface(object):
                 "unit": self.init_unit_from_list,
                 "vlan-tagging": ConfigurationElement.init_default_bool_from_list(self),
                 "description": ConfigurationElement.init_default_from_list(self),
+                "ether-options": ConfigurationElement.init_default_from_list(self),
                 "gigether-options": self.init_gigether_options_from_list,
                 "no-gratuitous-arp-reply": ConfigurationElement.init_default_bool_from_list(self),
                 "no-gratuitous-arp-request": ConfigurationElement.init_default_bool_from_list(self),
                 "aggregated-ether-options": self.init_aggregated_ether_options_from_list,
+                "disable": self.init_disable_from_list,
+                "speed": ConfigurationElement.init_default_from_list(self),
+                "link-mode": ConfigurationElement.init_default_from_list(self),
             }
         return dict_ret
     
+    def init_disable_from_list(self, int_index, lst_src, **kwargs):
+        if len(lst_src) != 1:
+            raise Exception
+        
+        if lst_src[0][0] != "set": 
+            raise Exception
+            
+        self.bool_enabled = False
+        
     def init_aggregated_ether_options_from_list(self, int_index, lst_src, **kwargs):
         self.aggregated_ether_options = Interface.AggregatedEtherOptions()
         self.aggregated_ether_options.init_from_list(int_index, lst_src, **kwargs)
@@ -177,7 +196,8 @@ class Interface(object):
         self.gigether_options.init_from_list(int_index, lst_src, **kwargs)
     
     def init_unit_from_list(self, int_index, lst_src, **kwargs):
-        dict_ret = self.parser.init_objects_from_list(int_index, lst_src, {}, **kwargs)
+        #dict_ret = self.parser.init_objects_from_list(int_index, lst_src, {}, **kwargs)
+        dict_ret = self.parser.split_list_to_dict(int_index, lst_src)
         for str_unit_name, lst_lines in dict_ret.items():
             unit = Interface.Unit(str_unit_name)
             unit.init_from_list(int_index+1, lst_lines, **kwargs)
@@ -287,22 +307,33 @@ class Interface(object):
     class GigetherOptions:
         def __init__(self):
             self.bool_active = True
+            self.parser = Parser()
             
         @ConfigurationElement.preprocess_deactivated_object
         def init_from_list(self, int_index, lst_src, **kwargs):
             if len(lst_src) != 1:
                 raise Exception
-            if lst_src[0][int_index] != "802.3ad":
-                raise Exception
             
+            dict_ret = self.parser.init_objects_from_list(
+                int_index, lst_src, {
+                "802.3ad": self.init_802_3ad_from_list,
+                "no-auto-negotiation": ConfigurationElement.init_default_bool_from_list(self),
+                }, 
+                **kwargs)
+                
+            if dict_ret:
+                pdb.set_trace()
+            
+        def init_802_3ad_from_list(self, int_index, lst_src, **kwargs):
             self.protocol_802dot3ad = Interface.GigetherOptions.Protocol802dot3ad()
-            self.protocol_802dot3ad.init_from_list(int_index+1, lst_src, **kwargs)
+            self.protocol_802dot3ad.init_from_list(int_index, lst_src, **kwargs)
             
         class Protocol802dot3ad:
             def __init__(self):
                 self.ae_interface = None
                 self.parser = Parser()
-                
+            
+            @ConfigurationElement.preprocess_deactivated_object
             def init_from_list(self, int_index, lst_src, **kwargs):
                 if len(lst_src) != 1:
                     raise Exception
@@ -329,6 +360,8 @@ class Interface(object):
                 "tunnel": self.init_tunnel_from_list,
                 "family": self.init_family_from_list,
                 "vlan-id": self.init_vlan_id_from_list,
+                "encapsulation": ConfigurationElement.init_default_from_list(self),
+                "peer-unit": ConfigurationElement.init_default_from_list(self),
                 }, 
                 **kwargs)
             if dict_ret:
@@ -423,18 +456,30 @@ class Interface(object):
                 int_index, lst_src, {
                 "inet": self.init_inet_from_list,
                 "inet6": self.init_inet6_from_list,
+                "bridge": self.init_bridge_from_list,
+                "ethernet-switching": self.init_ethernet_switching_from_list,
                 }, 
                 **kwargs)
                 
                 if dict_ret:
+                    for x in  dict_ret:
+                        print("####"+x)
                     pdb.set_trace()
                 
             def init_inet6_from_list(self, int_index, lst_src, **kwargs):
-                self.protocol = Interface.Unit.Family.Inet()
+                self.protocol = self.__class__.Inet()
                 self.protocol.init_from_list(int_index, lst_src, **kwargs)            
             
             def init_inet_from_list(self, int_index, lst_src, **kwargs):
-                self.protocol = Interface.Unit.Family.Inet6()
+                self.protocol = self.__class__.Inet6()
+                self.protocol.init_from_list(int_index, lst_src, **kwargs)
+            
+            def init_bridge_from_list(self, int_index, lst_src, **kwargs):
+                self.protocol = self.__class__.Bridge()
+                self.protocol.init_from_list(int_index, lst_src, **kwargs)            
+            
+            def init_ethernet_switching_from_list(self, int_index, lst_src, **kwargs):
+                self.protocol = self.__class__.EthernetSwitching()
                 self.protocol.init_from_list(int_index, lst_src, **kwargs)
                 
             class Inet:
@@ -451,8 +496,8 @@ class Interface(object):
                     int_index, lst_src, {
                     "mtu": self.init_mtu_from_list,
                     "address": self.init_address_from_list,
-                    "filter": self.init_default_from_list,
-                    "sampling": self.init_default_from_list,
+                    "filter": ConfigurationElement.init_default_from_list(self),
+                    "sampling": ConfigurationElement.init_default_from_list(self),
                     }, 
                     **kwargs)
                     
@@ -469,36 +514,48 @@ class Interface(object):
                     self.mtu = lst_src[0][int_index]
 
                 def init_address_from_list(self, int_index, lst_src, **kwargs):
-                    dict_ret = self.parser.init_objects_from_list(
-                    int_index, lst_src, {}, 
-                    **kwargs)
                     
+                    dict_ret = self.parser.split_list_to_dict(int_index, lst_src)
                     for str_key, lst_lines in dict_ret.items():
                         address = self.Address()
                         address.init_from_list(int_index, lst_lines, **kwargs)
                         self.addresses.append(address)
                 
-                def init_default_from_list(self, int_index, lst_src, **kwargs):
-                    for lst_line in lst_src:
-                        self.dict_vars_vals[" ".join(lst_line)] = int_index
-                
                 class Address:
                     def __init__(self):
                         self.ip_address = None
+                        self.parser = Parser()
                         
+                    @ConfigurationElement.preprocess_deactivated_object
                     def init_from_list(self, int_index, lst_src, **kwargs):
-                        if len(lst_src) != 1:
-                            pdb.set_trace()
-
-                        ip = IP()
-                        ip.init_address(lst_src[0][int_index])
-
+                        if len(lst_src) < 1:
+                            raise Exception
+                        
+                        self.value = self.__class__.Address_Value()
+                        self.value.init_from_list(int_index+1, lst_src, **kwargs)
+                        
                     class Address_Value:
                         def __init__(self):
-                            pass
+                            self.value = None
+                            self.parser = Parser()
+                        
+                        @ConfigurationElement.preprocess_deactivated_object
+                        def init_from_list(self, int_index, lst_src, **kwargs):
+                            self.value = IP()
+                            self.value.init_address(lst_src[0][int_index-1])
+                            #pdb.set_trace()
+                            dict_ret = self.parser.init_objects_from_list(
+                            int_index, lst_src, 
+                            {
+                            "primary":ConfigurationElement.init_default_bool_from_list(self),
+                            "preferred":ConfigurationElement.init_default_bool_from_list(self),
+                            "vrrp-inet6-group":ConfigurationElement.init_default_from_list(self),
+                            }, 
+                            **kwargs)
                             
-                        def init_from_list(self, lst_src):
-                            pdb.set_trace()
+                            if dict_ret:
+                                pdb.set_trace()
+                                raise Exception
             
             class Inet6:
                 def __init__(self):
@@ -531,9 +588,10 @@ class Interface(object):
                     self.mtu = lst_src[0][int_index]
 
                 def init_address_from_list(self, int_index, lst_src, **kwargs):
-                    dict_ret = self.parser.init_objects_from_list(
-                    int_index, lst_src, {}, 
-                    **kwargs)
+                    #dict_ret = self.parser.init_objects_from_list(
+                    #int_index, lst_src, {}, 
+                    #**kwargs)
+                    dict_ret = self.parser.split_list_to_dict(int_index, lst_src)
                     
                     for str_key, lst_lines in dict_ret.items():
                         address = self.Address()
@@ -572,13 +630,50 @@ class Interface(object):
                             {
                             "primary":ConfigurationElement.init_default_bool_from_list(self),
                             "preferred":ConfigurationElement.init_default_bool_from_list(self),
+                            "vrrp-group":ConfigurationElement.init_default_from_list(self),
                             }, 
                             **kwargs)
                             
                             if dict_ret:
                                 pdb.set_trace()
                                 raise Exception
+            
+            class Bridge:
+                def __init__(self):
+                    self.parser = Parser()
+                
+                @ConfigurationElement.preprocess_deactivated_object
+                def init_from_list(self, int_index, lst_src, **kwargs):
+                    dict_ret = self.parser.init_objects_from_list(
+                    int_index, lst_src, {
+                    "interface-mode": ConfigurationElement.init_default_from_list(self),
+                    "vlan-id-list": ConfigurationElement.init_default_from_list(self),
+                    },
+                    **kwargs)
                     
+                    if dict_ret:
+                        pdb.set_trace()
+            
+            class EthernetSwitching:
+                def __init__(self):
+                    self.parser = Parser()
+                
+                @ConfigurationElement.preprocess_deactivated_object
+                def init_from_list(self, int_index, lst_src, **kwargs):
+                    dict_ret = self.parser.init_objects_from_list(
+                    int_index, lst_src, {
+                    "vlan": ConfigurationElement.init_default_from_list(self),
+                    "filter": ConfigurationElement.init_default_from_list(self),
+                    "interface-mode": ConfigurationElement.init_default_from_list(self),
+                    "port-mode": ConfigurationElement.init_default_from_list(self),
+                    },
+                    **kwargs)
+                    
+                    if dict_ret:
+                        for x in dict_ret:
+                            print("###"+x)
+                        pdb.set_trace()
+                
     class InterfaceInitException(Exception):
         pass
     
@@ -589,8 +684,8 @@ class Interface(object):
 class InterfaceLo(Interface):
     def __init__(self, name):
         super().__init__(name)
-    
-    
+
+        
 class InterfaceFXP(Interface):
     def __init__(self, name):
         super().__init__(name)
@@ -614,12 +709,145 @@ class InterfaceXE(Interface):
 class InterfaceAE(Interface):
     def __init__(self, name):
         super().__init__(name)
+
+
+class InterfaceET(Interface):
+    def __init__(self, name):
+        super().__init__(name)
+
+
+class InterfaceST(Interface):
+    def __init__(self, name):
+        super().__init__(name)
+
         
+class InterfaceVlan(Interface):
+    def __init__(self, name):
+        super().__init__(name)        
+
+        
+class InterfaceVME(Interface):
+    def __init__(self, name):
+        super().__init__(name)        
+
         
 class InterfaceME(Interface):
     def __init__(self, name):
         super().__init__(name)
+
         
+class InterfaceLT(Interface):
+    def __init__(self, name):
+        super().__init__(name)
+
+        
+class InterfaceIRB(Interface):
+    def __init__(self, name):
+        super().__init__(name)        
+
+        
+class InterfaceInterRange(Interface):
+    def __init__(self, name):
+        super().__init__(name)
+        self.ranges = []
+    
+    def init_from_list(self, int_index, lst_src, **kwargs):
+        dict_src = self.parser.split_list_to_dict(int_index, lst_src)
+        for str_name, lst_lines in dict_src.items():
+            rng = self.__class__.Range(str_name)
+            rng.init_from_list(int_index+1, lst_lines, **kwargs)
+            self.ranges.append(rng)
+    
+    class Range:      
+        def __init__(self, str_name):
+            self.name = str_name
+            self.parser= Parser()
+            self.lst_str_members = []
+            self.lst_uninited_members = []
+        
+        def init_from_list(self, int_index, lst_src, **kwargs):    
+            dict_ret = self.parser.init_objects_from_list(
+             int_index, lst_src, 
+            {
+                "member": self.init_member_from_list,
+                "unit": self.init_unit_from_list,
+            },
+            **kwargs
+            )
+            
+            if dict_ret:
+                for x in  dict_ret:
+                    print("####"+x)
+                pdb.set_trace()
+            pdb.set_trace()
+
+        def init_member_from_list(self, int_index, lst_src, **kwargs):
+            for lst_line in lst_src:
+                if lst_line[0] != "set":
+                    raise Exception
+                
+                lst_inter_names = self.__class__.parse_range_string(lst_line[int_index].strip('"'))
+
+                for str_inter_name in lst_inter_names:
+                      lst_found = self.parser.get_objects_by_values({"name": str_inter_name}, self.lst_str_members, int_limit=1)
+                      if lst_found:
+                          raise Exception
+                      
+                      lst_found = self.parser.get_objects_by_values({"name": str_inter_name}, kwargs["lst_interfaces"], int_limit=1)
+                      if lst_found:
+                          raise Exception
+                          
+                      
+                      self.lst_str_members.append(str_inter_name)
+                      cls = JuniperBaseDevice.get_interface_class_by_interface_name(str_inter_name)
+                      if not cls:
+                          raise Exception
+                      inter_member = cls(str_inter_name)
+                      self.lst_uninited_members.append(inter_member)
+        
+        @staticmethod
+        def parse_range_string(str_src):
+            lst_ret = []
+            if "[" in str_src:
+                if str_src.count("[") != 1:
+                    raise Exception
+                
+                if str_src.count("]") != 1:
+                    raise Exception
+            
+                str_prefix = str_src[:str_src.find("[")]
+                str_range = str_src[str_src.find("[")+1: str_src.find("]")]
+                if "-" in str_range:
+                    str_start, str_end = str_range.split("-")
+                    lst_ret = list(map(lambda x: 
+                    str_prefix+str(x), range(int(str_start), int(str_end)+1)))
+                else:
+                    raise Exception
+            else:
+                raise Exception
+            
+            return lst_ret
+                   
+        def init_unit_from_list(self, int_index, lst_src, **kwargs):
+            pdb.set_trace()
+            
+            for type_interface in JuniperBaseDevice.InterfaceType:
+                if str_name.startswith(type_interface.name.lower()):
+                    cls_inter = type_interface.value
+                    break
+                
+                if str_name.replace("-","_").startswith(type_interface.name.lower()):
+                    cls_inter = type_interface.value
+                    break            
+            else:
+                print(str_name)
+                pdb.set_trace()
+                raise Exception(str_name)
+            
+            interface = cls_inter(str_name)
+            interface.init_from_list(int_index, lst_lines, lst_interfaces=self.interfaces)
+            self.interfaces.append(interface)
+    
     
 class JuniperBaseDevice(object):
     def __init__(self):
@@ -630,13 +858,12 @@ class JuniperBaseDevice(object):
     #@init_deactivated_object
     def init_from_list(self, lst_src, int_index=1):
         self.lst_src = lst_src
-        
         dict_ret = self.parser.init_objects_from_list(
              int_index, lst_src, 
             {
                 "version": self.init_version_from_list,
                 "interfaces": self.init_interfaces_from_list,
-                "configuration": ConfigurationElement.init_default_from_list(self),
+                "configuration": self.init_configuration_from_list,
                 "groups": ConfigurationElement.init_default_from_list(self),
                 "apply-groups": ConfigurationElement.init_default_from_list(self),
                 "system": ConfigurationElement.init_default_from_list(self),
@@ -646,17 +873,25 @@ class JuniperBaseDevice(object):
                 "forwarding-options": ConfigurationElement.init_default_from_list(self),
                 "event-options": ConfigurationElement.init_default_from_list(self),
                 "routing-options": ConfigurationElement.init_default_from_list(self),
-                "protocols": ConfigurationElement.init_default_from_list(self),
+                "protocols": self.init_protocols_from_list,
                 "policy-options": ConfigurationElement.init_default_from_list(self),
                 "firewall": ConfigurationElement.init_default_from_list(self),
                 "routing-instances": ConfigurationElement.init_default_from_list(self),
+                "bridge-domains": ConfigurationElement.init_default_from_list(self),
+                "switch-options": ConfigurationElement.init_default_from_list(self),
+                "vlans": ConfigurationElement.init_default_from_list(self),
+                "security": ConfigurationElement.init_default_from_list(self),
+                "access": ConfigurationElement.init_default_from_list(self),
+                "virtual-chassis": ConfigurationElement.init_default_from_list(self),
             }
             )
         
         if dict_ret:
+            for x in  dict_ret:
+                print("####"+x)
             pdb.set_trace()
             
-    def init_configuration_from_list(self, lst_src):
+    def init_configuration_from_list(self, int_index, lst_src, **kwargs):
         pdb.set_trace()
 
     def init_version_from_list(self, int_index, lst_src, **kwargs):
@@ -681,12 +916,13 @@ class JuniperBaseDevice(object):
     def init_services_from_list(self, lst_src):
         pdb.set_trace()
     
-    
     def init_interfaces_from_list(self, int_index, lst_src, **kwargs):
         dict_src = self.parser.split_list_to_dict(int_index, lst_src)
         def func_key(str_src):
             if str_src.startswith("ae"):
                 return 0
+            if str_src.startswith("interface-range"):
+                return 10
             return 1
             
         lst_ordered_src = sorted(list(dict_src.keys()), key = func_key)
@@ -700,9 +936,14 @@ class JuniperBaseDevice(object):
             if str_name.startswith(type_interface.name.lower()):
                 cls_inter = type_interface.value
                 break
+            
+            if str_name.replace("-","_").startswith(type_interface.name.lower()):
+                cls_inter = type_interface.value
+                break            
         else:
+            print(str_name)
             pdb.set_trace()
-            raise Exception
+            raise Exception(str_name)
         
         interface = cls_inter(str_name)
         interface.init_from_list(int_index, lst_lines, lst_interfaces=self.interfaces)
@@ -720,9 +961,13 @@ class JuniperBaseDevice(object):
     def init_routing_options_from_list(self, lst_src):
         pdb.set_trace()
     
-    def init_protocols_from_list(self, lst_src):
+    def init_protocols_from_list(self, int_index, lst_src, **kwargs):
+        self.protocols = self.__class__.Protocols()
+        self.protocols.init_from_list(int_index, lst_src, **kwargs)
+            
+    def init_bgp_from_list(self, int_index, lst_src, **kwargs):
         pdb.set_trace()
-    
+        
     def init_policy_options_from_list(self, lst_src):
         pdb.set_trace()
     
@@ -731,7 +976,147 @@ class JuniperBaseDevice(object):
     
     def init_routing_instances_from_list(self, lst_src):
         pdb.set_trace()
+   
+    class Protocols:
+        def __init__(self):
+            self.parser = Parser()
+            
+        def init_from_list(self, int_index, lst_src, **kwargs):
+            dict_ret = self.parser.init_objects_from_list(
+                int_index, lst_src, 
+                {
+                    "bgp": self.init_bgp_from_list,
+                    "layer2-control": ConfigurationElement.init_default_from_list(self),
+                    "lldp": ConfigurationElement.init_default_from_list(self),
+                    "vrrp": ConfigurationElement.init_default_from_list(self),
+                    "ospf": ConfigurationElement.init_default_from_list(self),
+                    "lldp-med": ConfigurationElement.init_default_from_list(self),
+                    "igmp-snooping": ConfigurationElement.init_default_from_list(self),
+                    "rstp": ConfigurationElement.init_default_from_list(self),
+                    "l2-learning": ConfigurationElement.init_default_from_list(self),
+                },
+                **kwargs
+                )
+            
+            if dict_ret:
+                for x in  dict_ret:
+                    print("####"+x)
+                pdb.set_trace()
         
+        def init_bgp_from_list(self, int_index, lst_src, **kwargs):
+            self.bgp = self.__class__.Bgp()
+            self.bgp.init_from_list(int_index, lst_src, **kwargs)
+            return 
+            
+        class Bgp(ConfigurationElement):
+            def __init__(self):
+                self.parser = Parser()
+                self.groups = []
+            
+            def init_from_list(self, int_index, lst_src, **kwargs):
+                dict_ret = self.parser.init_objects_from_list(
+                    int_index, lst_src, 
+                    {
+                        "traceoptions": ConfigurationElement.init_default_from_list(self),
+                        "group": self.init_group_from_list,
+                    },
+                    **kwargs
+                    )
+                
+                if dict_ret:
+                    pdb.set_trace()
+            
+            def init_group_from_list(self, int_index, lst_src, **kwargs):
+                dict_src = self.parser.split_list_to_dict(int_index, lst_src)
+                for str_name, lst_lines in dict_src.items():
+                    grp = self.__class__.Group(str_name)
+                    grp.init_from_list(int_index+1, lst_lines, **kwargs)
+                    self.groups.append(grp)
+                        
+            class Group:
+                def __init__(self, str_name):
+                    self.name = str_name
+                    self.parser = Parser()
+                    self.bool_active = True
+                    self.neighbors = []
+                    
+                @ConfigurationElement.preprocess_deactivated_object
+                def init_from_list(self, int_index, lst_src, **kwargs):
+                    dict_ret = self.parser.init_objects_from_list(
+                        int_index, lst_src, 
+                        {
+                            'type': ConfigurationElement.init_default_from_list(self),
+                            'import': ConfigurationElement.init_default_from_list(self),
+                            'export': ConfigurationElement.init_default_from_list(self),
+                            'remove-private': ConfigurationElement.init_default_bool_from_list(self),
+                            'peer-as': ConfigurationElement.init_default_from_list(self),
+                            'multipath': ConfigurationElement.init_default_from_list(self),
+                            'multihop': ConfigurationElement.init_default_from_list(self),
+                            'neighbor': self.init_neighbor_from_list,
+                            'traceoptions': ConfigurationElement.init_default_from_list(self),
+                            'cluster': ConfigurationElement.init_default_from_list(self),
+                            'family': ConfigurationElement.init_default_from_list(self),
+                            'ttl': ConfigurationElement.init_default_from_list(self),
+                            'keep': ConfigurationElement.init_default_from_list(self),
+                            'accept-remote-nexthop': ConfigurationElement.init_default_bool_from_list(self),
+                            'hold-time': ConfigurationElement.init_default_from_list(self),
+                            'authentication-key': ConfigurationElement.init_default_from_list(self),
+                            'local-as': ConfigurationElement.init_default_from_list(self),
+                            'bfd-liveness-detection': ConfigurationElement.init_default_from_list(self),
+                            'description': ConfigurationElement.init_default_from_list(self),
+                        },
+                        **kwargs
+                        )
+                        
+                    if dict_ret:
+                        for x in  dict_ret:
+                            print("####"+x)
+                        pdb.set_trace()                 
+                
+                def init_neighbor_from_list(self, int_index, lst_src, **kwargs):
+                    dict_src = self.parser.split_list_to_dict(int_index, lst_src)
+                    for str_key, lst_lines in dict_src.items():
+                        nbr = self.__class__.Neighbor(str_key)
+                        nbr.init_from_list(int_index+1, lst_src, **kwargs)
+                        self.neighbors.append(nbr)
+                        
+                class Neighbor:
+                    def __init__(self, str_name):
+                        self.name = str_name
+                        self.value = IP()
+                        self.value.init_host(str_name)
+                        self.parser = Parser()
+                        self.bool_active = True
+                    
+                    @ConfigurationElement.preprocess_deactivated_object
+                    def init_from_list(self, int_index, lst_src, **kwargs):
+                        dict_ret = self.parser.init_objects_from_list(
+                            int_index, lst_src, 
+                            {
+                                'family': ConfigurationElement.init_default_from_list(self),
+                                'authentication-key': ConfigurationElement.init_default_from_list(self),
+                                'description': ConfigurationElement.init_default_from_list(self),
+                                'keep': ConfigurationElement.init_default_from_list(self),
+                                'hold-time': ConfigurationElement.init_default_from_list(self),
+                                'multipath': ConfigurationElement.init_default_from_list(self),
+                                'mtu-discovery': ConfigurationElement.init_default_from_list(self),
+                                'local-address': ConfigurationElement.init_default_from_list(self),
+                                'bfd-liveness-detection': ConfigurationElement.init_default_from_list(self),
+                                'import': ConfigurationElement.init_default_from_list(self),
+                                'export': ConfigurationElement.init_default_from_list(self),
+                            },
+                            **kwargs
+                            )
+    
+                        if dict_ret:
+                            for x in  dict_ret:
+                                print("####"+x)
+                            pdb.set_trace()                 
+    
+    @staticmethod
+    def get_interface_class_by_interface_name(str_src):
+        pdb.set_trace()
+    
     class InterfaceType(Enum):
         LO = InterfaceLo
         FXP = InterfaceFXP
@@ -740,6 +1125,13 @@ class JuniperBaseDevice(object):
         GR = InterfaceGR
         AE = InterfaceAE
         ME = InterfaceME
+        LT = InterfaceLT
+        IRB = InterfaceIRB
+        ET = InterfaceET
+        ST = InterfaceST
+        VLAN = InterfaceVlan
+        VME = InterfaceVME
+        INTERFACE_RANGE = InterfaceInterRange
         
     
     
