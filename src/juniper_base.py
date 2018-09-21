@@ -1115,7 +1115,18 @@ class JuniperBaseDevice(object):
     
     @staticmethod
     def get_interface_class_by_interface_name(str_src):
-        pdb.set_trace()
+        for type_interface in JuniperBaseDevice.InterfaceType:
+            if str_src.startswith(type_interface.name.lower()):
+                cls_inter = type_interface.value
+                break
+
+            if str_src.replace("-", "_").startswith(type_interface.name.lower()):
+                cls_inter = type_interface.value
+                break
+        else:
+            raise Exception(str_src)
+
+        return cls_inter
     
     class InterfaceType(Enum):
         LO = InterfaceLo
