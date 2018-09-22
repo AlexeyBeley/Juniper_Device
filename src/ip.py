@@ -5,6 +5,9 @@ from enum import Enum
 
 
 class IP:
+    """
+    Class for network engineers usage
+    """
     def __init__(self):
         self.type = None
         self.str_int_mask = None
