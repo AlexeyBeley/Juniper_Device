@@ -7,7 +7,12 @@ from src.h_logger import HLogger
 class Parser(object):
     def __init__(self):
         self.logger = HLogger(__name__)
-        
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return True
+
     def init_objects_from_list(self, int_index, lst_lines, dict_init_options, **kwargs):
         """
          lst_src = [["","",""],["","",""]]
@@ -44,8 +49,16 @@ class Parser(object):
             dict_ret[lst_line[int_src]].append(lst_line)
         
         return dict_ret
-        
-    def get_objects_by_values(self, dict_src, lst_src, int_limit=0):
+
+    @staticmethod
+    def get_objects_by_values(dict_src, lst_src, int_limit=0):
+        """
+
+        :param dict_src: Search values
+        :param lst_src: List of objects to search in
+        :param int_limit: Maximum count of return values
+        :return: List of found values
+        """
         lst_ret = []
         for obj in lst_src:
             for str_key, value in dict_src.items():
@@ -63,6 +76,45 @@ class Parser(object):
             
         return lst_ret
 
+    @staticmethod
+    def merge_objects(object_self, object_other, object_default, dict_merge_options, lst_ignore=["lst_src"]):
+        if object_self.__class__ != object_other.__class__:
+            raise Exception
+
+        for str_key, attr_other in object_other.__dict__.items():
+            if str_key in lst_ignore:
+                continue
+
+            if hasattr(object_default, str_key):
+                if not hasattr(object_self, str_key):
+                    raise Exception
+
+                attr_default = getattr(object_default, str_key)
+                attr_self = getattr(object_self, str_key)
+
+                if attr_other == attr_default:
+                    continue
+                if str_key in dict_merge_options:
+                    dict_merge_options[str_key](object_other)
+                else:
+                    pdb.set_trace()
+                    raise Exception
+            else:
+                if hasattr(object_self, str_key):
+                    attr_self = getattr(object_self, str_key)
+
+                    if attr_other == attr_self:
+                        continue
+
+                    if str_key in dict_merge_options:
+                        dict_merge_options[str_key](object_other)
+                    else:
+                        pdb.set_trace()
+                        raise Exception
+                else:
+                    setattr(object_self, str_key, attr_other)
+                    continue
+
+
         
-        
-        
+
