@@ -680,7 +680,7 @@ class Interface(object):
                             "vlan": ConfigurationElement.init_default_from_list(self),
                             "filter": ConfigurationElement.init_default_from_list(self),
                             "interface-mode": ConfigurationElement.init_default_from_list(self),
-                            "port-mode": ConfigurationElement.init_default_from_list(self),
+                            "port-mode": self.init_port_mode_form_list,
                         },
                         **kwargs)
 
@@ -688,6 +688,10 @@ class Interface(object):
                         for x in dict_ret:
                             print("###" + x)
                         pdb.set_trace()
+
+                def init_port_mode_form_list(self, int_index, lst_src, **kwargs):
+                    self.port_mode = self.__class__.PortMode()
+                    self.port_mode.init_from_list(int_index, lst_src, **kwargs)
 
                 def merge(self, protocol_other):
                     dict_merge_options = {"port_mode": self.merge_port_mode}
@@ -697,6 +701,33 @@ class Interface(object):
                     pdb.set_trace()
                     self.port_mode.merge(object_other.protocol)
 
+                class PortMode:
+                    def __init__(self):
+                        self.parser = Parser()
+
+                    @ConfigurationElement.preprocess_deactivated_object
+                    def init_from_list(self, int_index, lst_src, **kwargs):
+                        dict_ret = self.parser.init_objects_from_list(
+                            int_index, lst_src, {
+                                "access": self.init_access_form_list,
+                                "trunk": self.init_trunk_form_list,
+                            },
+                            **kwargs)
+
+                        if dict_ret:
+                            for x in dict_ret:
+                                print("###" + x)
+                            pdb.set_trace()
+                    def init_access_form_list(self, int_index, lst_src, **kwargs):
+                        pdb.set_trace()
+
+                    def init_trunk_form_list(self, int_index, lst_src, **kwargs):
+                        pdb.set_trace()
+
+                    class Access:
+                        pass
+                    class Trunk:
+                        pass
     class InterfaceInitException(Exception):
         pass
 
