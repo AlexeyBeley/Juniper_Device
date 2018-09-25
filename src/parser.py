@@ -13,7 +13,7 @@ class Parser(object):
             return False
         return True
 
-    def init_objects_from_list(self, int_index, lst_lines, dict_init_options, **kwargs):
+    def init_objects_from_list_base(self, int_index, lst_lines, dict_init_options, **kwargs):
         """
          lst_src = [["","",""],["","",""]]
         """
@@ -27,8 +27,37 @@ class Parser(object):
             
             dict_init_options[str_key](int_index+1, dict_src[str_key], **kwargs)
         
-        return dict_ret            
-        
+        return dict_ret
+
+    def init_objects_from_list(self, int_index, lst_lines, dict_init_options, **kwargs):
+        """
+         lst_src = [["","",""],["","",""]] list of space split configuration lines
+         "func_key" = sorting function to select the order
+        """
+        if "func_key" in kwargs:
+            func_key = kwargs["func_key"]
+        else:
+            def func_key(x):
+                return 0
+
+        dict_ret = OrderedDict()
+        dict_src = self.split_list_to_dict(int_index, lst_lines)
+
+        lst_ordered_src = sorted(list(dict_src.keys()), key=func_key)
+
+        int_index += 1
+
+        for str_key in lst_ordered_src:
+            if str_key not in dict_init_options:
+                dict_ret[str_key] = dict_src[str_key]
+                self.logger.warning("Unknown key: '%s', at: %s " % (str_key, str(traceback.extract_stack())))
+                continue
+
+            dict_init_options[str_key](int_index, dict_src[str_key], **kwargs)
+
+        return dict_ret
+
+
     def split_list_to_dict(self, int_src, lst_src):
         dict_ret = OrderedDict()
         
@@ -77,7 +106,7 @@ class Parser(object):
         return lst_ret
 
     @staticmethod
-    def merge_objects(object_self, object_other, object_default, dict_merge_options, lst_ignore=["lst_src"]):
+    def merge_objects_(object_self, object_other, object_default, dict_merge_options, lst_ignore=["lst_src"]):
         if object_self.__class__ != object_other.__class__:
             raise Exception
 
