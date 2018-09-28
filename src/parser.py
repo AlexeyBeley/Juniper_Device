@@ -4,6 +4,7 @@ import traceback
 
 from src.h_logger import HLogger
 
+
 class Parser(object):
     def __init__(self):
         self.logger = HLogger(__name__)
@@ -22,11 +23,11 @@ class Parser(object):
         for str_key in dict_src:
             if str_key not in dict_init_options:
                 dict_ret[str_key] = dict_src[str_key]
-                self.logger.warning("Unknown key: '%s', at: %s "%(str_key, str(traceback.extract_stack())))
+                self.logger.warning("Unknown key: '%s', at: %s " % (str_key, str(traceback.extract_stack())))
                 continue
-            
-            dict_init_options[str_key](int_index+1, dict_src[str_key], **kwargs)
-        
+
+            dict_init_options[str_key](int_index + 1, dict_src[str_key], **kwargs)
+
         return dict_ret
 
     def init_objects_from_list(self, int_index, lst_lines, dict_init_options, **kwargs):
@@ -57,26 +58,38 @@ class Parser(object):
 
         return dict_ret
 
+    # todo:check
+    def split_list_to_dict_recursive(self, int_src, lst_src):
+        dict_ret = self.split_list_to_dict(int_src, lst_src)
+        for str_key, lst_lines in dict_ret.items():
+            ret = self.split_list_to_dict_recursive(int_src + 1, lst_lines)
+
+            if ret == OrderedDict():
+                dict_ret[str_key] = lst_lines
+            else:
+                dict_ret[str_key] = ret
+
+        return dict_ret
 
     def split_list_to_dict(self, int_src, lst_src):
         dict_ret = OrderedDict()
-        
+
         for lst_line in lst_src:
-              
+
             if not lst_line:
                 continue
-                
+
             if lst_line == ['']:
                 continue
-            
+
             if len(lst_line) <= int_src:
                 continue
-            
+
             if lst_line[int_src] not in dict_ret:
                 dict_ret[lst_line[int_src]] = []
-                
+
             dict_ret[lst_line[int_src]].append(lst_line)
-        
+
         return dict_ret
 
     @staticmethod
@@ -93,16 +106,16 @@ class Parser(object):
             for str_key, value in dict_src.items():
                 if not hasattr(obj, str_key):
                     break
-                
+
                 if getattr(obj, str_key) != value:
                     break
-                
+
             else:
                 lst_ret.append(obj)
                 if int_limit:
                     if len(lst_ret) == int_limit:
                         break
-            
+
         return lst_ret
 
     @staticmethod
@@ -143,7 +156,3 @@ class Parser(object):
                 else:
                     setattr(object_self, str_key, attr_other)
                     continue
-
-
-        
-

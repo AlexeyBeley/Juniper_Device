@@ -28,11 +28,15 @@ def clear_lines(lst_src):
         if str_line.startswith("alexey@"):
             continue
 
+        if str_line.startswith("{primary"):
+            continue
+
         if str_line.startswith("alexey.beley@"):
             continue
 
         if not str_line.startswith("set") and \
                 not str_line.startswith("deactivate"):
+            print(str_line)
             pdb.set_trace()
             raise Exception
 
@@ -42,8 +46,17 @@ def clear_lines(lst_src):
 
 
 str_folder_configs_path = "../private_files/"
+
+
+float_counter = 0
 for str_file_name in os.listdir(str_folder_configs_path):
+    print("Passed:%s" % (str(float_counter * 100 / len(os.listdir(str_folder_configs_path)))) + "%")
+    float_counter += 1
+    # if (float_counter * 100 / len(os.listdir(str_folder_configs_path))) < 70:
+    #   continue
+
     dev = JuniperBaseDevice()
+
     print(str_file_name)
     with open(os.path.join(str_folder_configs_path, str_file_name)) as f:
         str_lines = f.read()

@@ -8,11 +8,16 @@ from src.ip import IP
 from src.parser import Parser
 from src.h_logger import HLogger
 
+
 class ConfigurationElement(object):
     def __init__(self):
         self.value = None
+
+        self._bool_active = None
         self.bool_active = True
+
         self.lst_src = None
+        self.parser = Parser()
 
     @property
     def bool_active(self):
@@ -57,7 +62,7 @@ class ConfigurationElement(object):
         def get_attr_name():
             return ConfigurationElement.generate_attr_name_from_config_name(str_name)
 
-        @ConfigurationElement.preprocess_deactivated_object
+        @ConfigurationElement.preprocess_object_init
         def init_from_list(self, int_index, lst_src, **kwargs):
             self.lst_src = lst_src
 
@@ -92,10 +97,10 @@ class ConfigurationElement(object):
         return generate_init_element
 
     @staticmethod
-    def init_default_bool_from_list(obj_caller):
+    def init_default_bool_from_list(obj_caller_src):
         """obj_caller is the one which has subclasses in it"""
 
-        def generate_init_bool_element(int_index, lst_src, obj_caller=obj_caller, **kwargs):
+        def generate_init_bool_element(int_index, lst_src, obj_caller=obj_caller_src, **kwargs):
             obj_ret = ConfigurationElement.init_configuration_element_default_from_list(int_index, lst_src,
                                                                                         obj_caller=obj_caller, **kwargs)
             setattr(obj_caller, obj_ret.__class__.get_attr_name(), obj_ret)
@@ -107,11 +112,13 @@ class ConfigurationElement(object):
         raise NotImplementedError("todo:")
 
     @staticmethod
-    def preprocess_deactivated_object(func_src):
+    def preprocess_object_init(func_src):
         def func_ret(self, int_index, lst_src, **kwargs):
+            lst_src_new = []
+
             for i in range(len(lst_src)):
                 lst_line = lst_src[i]
-
+                # deactivate
                 if lst_line[0] != "set":
                     if lst_line[0] != "deactivate":
                         pdb.set_trace()
@@ -121,11 +128,110 @@ class ConfigurationElement(object):
                         self.bool_active = False
                         if len(lst_src) - 1 != i:
                             raise Exception
-                        lst_src = lst_src[:-1]
+                        continue
 
-            func_src(self, int_index, lst_src, **kwargs)
+                # apply_groups
+                if "apply-groups" in lst_line:
+                    pass
+
+                if len(lst_line) > int_index:
+                    if lst_line[int_index] == "apply-groups":
+                        lst_grp = self.parser.get_objects_by_values({"name": lst_line[int_index + 1]},
+                                                                    kwargs["lst_groups"], int_limit=1)
+                        if not lst_grp:
+                            raise Exception
+
+                        lst_lines_applied = ConfigurationElement.apply_group(int_index, lst_src, lst_grp[0])
+
+                        for lst_line_applied in lst_lines_applied:
+                            if lst_line_applied not in lst_src_new:
+                                lst_src_new.append(lst_line_applied)
+
+                        # remove the apply-group line
+                        continue
+
+                if lst_line not in lst_src_new:
+                    lst_src_new.append(lst_line)
+
+            func_src(self, int_index, lst_src_new, **kwargs)
 
         return func_ret
+
+    @staticmethod
+    def apply_group(int_index, lst_src, grp_src):
+        lst_ret = []
+
+        for lst_grp_line in grp_src.lst_src:
+            for lst_line in lst_src:
+                if lst_line[int_index] == 'apply-groups':
+                    continue
+                lst_line_new = ConfigurationElement.apply_group_line(int_index, lst_line, lst_grp_line)
+                if not lst_line_new:
+                    continue
+
+                if lst_line_new in lst_ret:
+                    continue
+
+                if lst_line_new in lst_src:
+                    continue
+
+                lst_ret.append(lst_line_new)
+
+        return lst_ret
+
+    @staticmethod
+    def apply_group_line(int_index, lst_str_config, lst_str_grp):
+        lst_ret = []
+        int_index_config = 1
+        int_index_grp = 3
+
+        while int_index_grp < len(lst_str_grp):
+            str_config = lst_str_config[int_index_config]
+            str_grp = lst_str_grp[int_index_grp]
+
+            if "<" in lst_str_grp[int_index_grp]:
+                bool_ret = ConfigurationElement.check_regex_config(str_config, str_grp)
+                if not bool_ret:
+                    if str_grp == str_config:
+                        raise Exception
+                    return []
+
+                str_grp = str_config
+
+            if str_config != str_grp:
+                if int_index < int_index_grp:
+                    for str_grp_cfg in lst_str_grp[int_index_grp:]:
+                        if "<" in str_grp_cfg and ">" in str_grp_cfg:
+                            pdb.set_trace()
+                            raise Exception
+                    return lst_str_config[:int_index_config] + lst_str_grp[int_index_grp:]
+
+                pdb.set_trace()
+                return []
+
+            int_index_grp += 1
+            int_index_config += 1
+
+        return lst_ret
+
+    @staticmethod
+    def check_regex_config(str_config, str_grp):
+        if str_grp[0] != "<":
+            raise Exception
+
+        if str_grp[-1] != ">":
+            raise Exception
+
+        if str_grp == "<*>":
+            return True
+
+        str_grp = str_grp.strip("<>")
+
+        result_search = re.search(str_grp, str_config)
+        if not result_search:
+            return False
+
+        return True
 
     @classmethod
     def get_attr_name(cls):
@@ -137,17 +243,28 @@ class ConfigurationElement(object):
         for i in range(1, len(cls.__name__)):
             str_current_char = cls.__name__[i]
             if str_current_char.istitle():
-                pdb.set_trace()
                 str_ret += "_" + str_current_char.lower()
             else:
                 str_ret += str_current_char.lower()
 
         return str_ret
 
-    def merge(self, object_other, lst_ignore=["lst_src"], dict_merge_options={}):
+    def merge(self, object_other, lst_ignore=None, dict_merge_options=None):
+        if dict_merge_options is None:
+            dict_merge_options = {}
+
+        if lst_ignore is None:
+            lst_ignore = ["lst_src"]
+
         self.merge_base(object_other, lst_ignore=lst_ignore, dict_merge_options=dict_merge_options)
 
-    def merge_base(self, object_other, lst_ignore=["lst_src"], dict_merge_options={}):
+    def merge_base(self, object_other, lst_ignore=None, dict_merge_options=None):
+        if dict_merge_options is None:
+            dict_merge_options = {}
+
+        if lst_ignore is None:
+            lst_ignore = ["lst_src"]
+
         object_default = self.__class__()
         if self.__class__ != object_other.__class__:
             raise Exception
@@ -183,16 +300,6 @@ class ConfigurationElement(object):
     def merge_attr_base(self, obj_other, str_attr_name):
         attr_self = getattr(self, str_attr_name)
         attr_self.merge(getattr(obj_other, str_attr_name))
-        try:
-            pass
-            #attr_self.merge(getattr(obj_other, str_attr_name))
-        except Exception as inst:
-            print(obj_other)
-            print(str_attr_name)
-            print(attr_self)
-            print(inst)
-            pdb.set_trace()
-            raise Exception
 
     def merge_attr(self, obj_other, str_attr_name):
         return self.merge_attr_base(obj_other, str_attr_name)
@@ -200,6 +307,7 @@ class ConfigurationElement(object):
 
 class Interface(ConfigurationElement):
     def __init__(self):
+        super().__init__()
         self.name = None
         self.parser = Parser()
         self.units = []
@@ -207,24 +315,15 @@ class Interface(ConfigurationElement):
         self.bool_enabled = True
         self.lst_src = None
 
-    @ConfigurationElement.preprocess_deactivated_object
+    @ConfigurationElement.preprocess_object_init
     def init_from_list(self, int_index, lst_src, **kwargs):
         self.lst_src = lst_src
-        self.name = lst_src[0][int_index-1]
+        self.name = lst_src[0][int_index - 1]
 
         dict_init_options = self.get_dict_init_options()
 
         def func_key(str_attr):
-            if str_attr == "apply-groups":
-                return 100
             return 0
-
-        dict_src = self.parser.split_list_to_dict(int_index, lst_src)
-        if "apply-groups" in dict_src:
-            lst_grp_to_apply = self.parser.get_objects_by_values({"name": dict_src["apply-groups"][0][int_index+1]}, kwargs["lst_groups"],
-                                                                 int_limit=1)
-            pdb.set_trace()
-            raise Exception
 
         dict_ret = self.parser.init_objects_from_list(
             int_index, lst_src, dict_init_options, func_key=func_key, **kwargs)
@@ -242,28 +341,23 @@ class Interface(ConfigurationElement):
             "vlan-tagging": ConfigurationElement.init_default_bool_from_list(self),
             "description": ConfigurationElement.init_default_from_list(self),
             "ether-options": ConfigurationElement.init_default_from_list(self),
-            "gigether-options": self.init_gigether_options_from_list,
+            "gigether-options": ConfigurationElement.init_default_from_list(self),
             "no-gratuitous-arp-reply": ConfigurationElement.init_default_bool_from_list(self),
             "no-gratuitous-arp-request": ConfigurationElement.init_default_bool_from_list(self),
-            "aggregated-ether-options": self.init_aggregated_ether_options_from_list,
+            "aggregated-ether-options": ConfigurationElement.init_default_from_list(self),
             "disable": self.init_disable_from_list,
             "enable": self.init_enable_from_list,
             "speed": ConfigurationElement.init_default_from_list(self),
             "link-mode": ConfigurationElement.init_default_from_list(self),
+            "redundant-ether-options": ConfigurationElement.init_default_from_list(self),
+            "fabric-options": ConfigurationElement.init_default_from_list(self),
             "apply-groups": self.init_apply_groups_from_list,
+            "gratuitous-arp-reply": ConfigurationElement.init_default_bool_from_list(self),
         }
         return dict_ret
 
     def init_apply_groups_from_list(self, int_index, lst_src, **kwargs):
-        if len(lst_src) != 1:
-            raise Exception
-
-        lst_grp_to_apply = self.parser.get_objects_by_values({"name": lst_src[0][int_index]}, kwargs["lst_groups"],
-                                                             int_limit=1)
-        if not lst_grp_to_apply:
-            raise Exception
-
-        self.apply_group(int_index-2, lst_grp_to_apply[0])
+        raise Exception("Shouldn't reach here!")
 
     def init_disable_from_list(self, int_index, lst_src, **kwargs):
         if len(lst_src) != 1:
@@ -283,27 +377,20 @@ class Interface(ConfigurationElement):
 
         self.bool_enabled = True
 
-    def init_aggregated_ether_options_from_list(self, int_index, lst_src, **kwargs):
-        self.aggregated_ether_options = Interface.AggregatedEtherOptions()
-        self.aggregated_ether_options.init_from_list(int_index, lst_src, **kwargs)
-
-    def init_description_from_list(self, int_index, lst_src, **kwargs):
-        self.description = Interface.DescriptionValue()
-        self.description.init_from_list(int_index, lst_src, **kwargs)
-
-    def init_gigether_options_from_list(self, int_index, lst_src, **kwargs):
-        self.gigether_options = Interface.GigetherOptions()
-        self.gigether_options.init_from_list(int_index, lst_src, **kwargs)
-
     def init_unit_from_list(self, int_index, lst_src, **kwargs):
-        # dict_ret = self.parser.init_objects_from_list(int_index, lst_src, {}, **kwargs)
         dict_ret = self.parser.split_list_to_dict(int_index, lst_src)
         for str_unit_name, lst_lines in dict_ret.items():
             unit = Interface.Unit()
             unit.init_from_list(int_index + 1, lst_lines, **kwargs)
             self.units.append(unit)
 
-    def merge(self, object_other, lst_ignore=["lst_src"], dict_merge_options={}):
+    def merge(self, object_other, lst_ignore=None, dict_merge_options=None):
+        if dict_merge_options is None:
+            dict_merge_options = {}
+
+        if lst_ignore is None:
+            lst_ignore = ["lst_src"]
+
         dict_merge_options["name"] = self.merge_name
         dict_merge_options["units"] = self.merge_unit
 
@@ -321,73 +408,41 @@ class Interface(ConfigurationElement):
         if self.name != obj_other.name:
             raise Exception
 
-    class NoGratuitousArpReply_:
+    class AggregatedEtherOptions(ConfigurationElement):
         def __init__(self):
-            self.bool_value = None
-            self.bool_active = False
-
-        @ConfigurationElement.preprocess_deactivated_object
-        def init_from_list(self, int_index, lst_src, **kwargs):
-            if len(lst_src) != 1:
-                raise Exception
-
-            self.bool_value = True
-
-        @staticmethod
-        def get_attr_name():
-            return "no_gratuitous_arp_reply"
-
-    class NoGratuitousArpRequest:
-        def __init__(self):
-            self.bool_value = None
-            self.bool_active = False
-
-        @ConfigurationElement.preprocess_deactivated_object
-        def init_from_list(self, int_index, lst_src, **kwargs):
-            if len(lst_src) != 1:
-                raise Exception
-
-            self.bool_value = True
-
-        @staticmethod
-        def get_attr_name():
-            return "no_gratuitous_arp_request"
-
-    class AggregatedEtherOptions:
-        def __init__(self):
+            super().__init__()
             self.lacp = None
             self.bool_active = False
             self.parser = Parser()
 
-        @ConfigurationElement.preprocess_deactivated_object
+        @ConfigurationElement.preprocess_object_init
         def init_from_list(self, int_index, lst_src, **kwargs):
             dict_ret = self.parser.init_objects_from_list(
                 int_index, lst_src,
-                {"lacp": ConfigurationElement.init_default_from_list(self)
-                 },
+                {
+                    "lacp": ConfigurationElement.init_default_from_list(self),
+                    "link-speed": ConfigurationElement.init_default_from_list(self),
+                },
                 **kwargs)
 
             if dict_ret:
                 pdb.set_trace()
 
-        def init_lacp_from_list(self, int_index, lst_src, **kwargs):
-            pdb.set_trace()
-            self.aggregated_ether_options = Interface.AggregatedEtherOptions()
-            self.aggregated_ether_options.init_from_list(int_index, lst_src, **kwargs)
-
         class Lacp(ConfigurationElement):
             def __init__(self):
+                super().__init__()
                 self.lacp = None
                 self.bool_active = False
                 self.parser = Parser()
 
-            @ConfigurationElement.preprocess_deactivated_object
+            @ConfigurationElement.preprocess_object_init
             def init_from_list(self, int_index, lst_src, **kwargs):
                 dict_ret = self.parser.init_objects_from_list(
                     int_index, lst_src,
                     {
                         "active": ConfigurationElement.init_default_bool_from_list(self),
                         "periodic": ConfigurationElement.init_default_from_list(self),
+                        "force-up": ConfigurationElement.init_default_from_list(self),
                     },
                     **kwargs)
 
@@ -399,7 +454,7 @@ class Interface(ConfigurationElement):
             self.str_value = None
             self.bool_active = False
 
-        @ConfigurationElement.preprocess_deactivated_object
+        @ConfigurationElement.preprocess_object_init
         def init_from_list(self, int_index, lst_src, **kwargs):
             if len(lst_src) != 1:
                 raise Exception
@@ -407,10 +462,11 @@ class Interface(ConfigurationElement):
 
     class GigetherOptions(ConfigurationElement):
         def __init__(self):
+            super().__init__()
             self.bool_active = True
             self.parser = Parser()
 
-        @ConfigurationElement.preprocess_deactivated_object
+        @ConfigurationElement.preprocess_object_init
         def init_from_list(self, int_index, lst_src, **kwargs):
             if len(lst_src) != 1:
                 raise Exception
@@ -419,6 +475,7 @@ class Interface(ConfigurationElement):
                 int_index, lst_src, {
                     "802.3ad": self.init_802_3ad_from_list,
                     "no-auto-negotiation": ConfigurationElement.init_default_bool_from_list(self),
+                    "redundant-parent": ConfigurationElement.init_default_from_list(self),
                 },
                 **kwargs)
 
@@ -435,7 +492,7 @@ class Interface(ConfigurationElement):
                 self.logger = HLogger(__name__)
                 self.parser = Parser()
 
-            @ConfigurationElement.preprocess_deactivated_object
+            @ConfigurationElement.preprocess_object_init
             def init_from_list(self, int_index, lst_src, **kwargs):
                 if len(lst_src) != 1:
                     raise Exception
@@ -444,26 +501,27 @@ class Interface(ConfigurationElement):
                                                               int_limit=1)
                 if not inter_ret:
                     self.logger.warning("Can't find interface '%s', at: %s " %
-                                        (lst_src[0][int_index] , " ".join(lst_src[0])))
+                                        (lst_src[0][int_index], " ".join(lst_src[0])))
 
                 self.ae_interface = inter_ret
 
     class Unit(ConfigurationElement):
         def __init__(self):
+            super().__init__()
             self.name = None
             self.vlan_id = None
             self.bool_enabled = True
             self.parser = Parser()
             self.dict_vars_vals = {}
 
-        @ConfigurationElement.preprocess_deactivated_object
+        @ConfigurationElement.preprocess_object_init
         def init_from_list(self, int_index, lst_src, **kwargs):
             self.lst_src = lst_src
-            self.name = lst_src[0][int_index-1]
+            self.name = lst_src[0][int_index - 1]
             dict_ret = self.parser.init_objects_from_list(
                 int_index, lst_src, {
                     "clear-dont-fragment-bit": self.init_clear_dont_fragment_bit_from_list,
-                    "description": self.init_description_from_list,
+                    "description": ConfigurationElement.init_default_from_list(self),
                     "tunnel": self.init_tunnel_from_list,
                     "family": self.init_family_from_list,
                     "vlan-id": self.init_vlan_id_from_list,
@@ -471,6 +529,7 @@ class Interface(ConfigurationElement):
                     "encapsulation": ConfigurationElement.init_default_from_list(self),
                     "peer-unit": ConfigurationElement.init_default_from_list(self),
                     "mac": ConfigurationElement.init_default_from_list(self),
+                    "arp-resp": ConfigurationElement.init_default_from_list(self),
                 },
                 **kwargs)
             if dict_ret:
@@ -485,9 +544,6 @@ class Interface(ConfigurationElement):
         def init_vlan_id_from_list(self, int_index, lst_src, **kwargs):
             self.vlan_id = Interface.Unit.VlanIdValue()
             self.vlan_id.init_from_list(int_index, lst_src, **kwargs)
-
-        def init_default_from_list(self, int_index, lst_src, **kwargs):
-            self.dict_vars_vals[lst_src[0][int_index - 1]] = lst_src
 
         def init_family_from_list(self, int_index, lst_src, **kwargs):
             self.family = Interface.Unit.Family()
@@ -506,17 +562,13 @@ class Interface(ConfigurationElement):
 
             self.clear_dont_fragment_bit = True
 
-        def init_description_from_list(self, int_index, lst_src, **kwargs):
-            if len(lst_src) != 1:
-                raise Interface.InterfaceInitException
+        def merge(self, object_other, lst_ignore=None, dict_merge_options=None):
+            if dict_merge_options is None:
+                dict_merge_options = {}
 
-            if lst_src[0][0] != "set":
-                raise Interface.InterfaceInitException
+            if lst_ignore is None:
+                lst_ignore = ["lst_src"]
 
-            self.description = Interface.DescriptionValue()
-            self.description.init_from_list(int_index, lst_src, **kwargs)
-
-        def merge(self, object_other, lst_ignore=["lst_src"], dict_merge_options={}):
             dict_merge_options["name"] = self.merge_name
             self.merge_base(object_other, lst_ignore=lst_ignore, dict_merge_options=dict_merge_options)
 
@@ -526,10 +578,11 @@ class Interface(ConfigurationElement):
 
         class VlanIdValue(ConfigurationElement):
             def __init__(self):
+                super().__init__()
                 self.int_value = None
                 self.bool_active = True
 
-            @ConfigurationElement.preprocess_deactivated_object
+            @ConfigurationElement.preprocess_object_init
             def init_from_list(self, int_index, lst_src, **kwargs):
                 if len(lst_src) != 1:
                     raise Exception
@@ -538,6 +591,7 @@ class Interface(ConfigurationElement):
 
         class Tunnel(ConfigurationElement):
             def __init__(self):
+                super().__init__()
                 self.source = None
                 self.destination = None
                 self.allow_fragmentation = False
@@ -549,6 +603,8 @@ class Interface(ConfigurationElement):
                         "source": self.init_source_from_list,
                         "destination": self.init_destination_from_list,
                         "allow-fragmentation": self.init_allow_fragmentation_from_list,
+                        "key": self.init_allow_fragmentation_from_list,
+                        "path-mtu-discovery": self.init_allow_fragmentation_from_list,
                     },
                     **kwargs)
 
@@ -570,6 +626,7 @@ class Interface(ConfigurationElement):
 
         class Family(ConfigurationElement):
             def __init__(self):
+                super().__init__()
                 self.parser = Parser()
                 self.protocol = None
                 self.dict_vars_vals = OrderedDict()
@@ -612,7 +669,7 @@ class Interface(ConfigurationElement):
                     self.parser = Parser()
                     self.dict_vars_vals = OrderedDict()
 
-                @ConfigurationElement.preprocess_deactivated_object
+                @ConfigurationElement.preprocess_object_init
                 def init_from_list(self, int_index, lst_src, **kwargs):
                     # for
                     dict_ret = self.parser.init_objects_from_list(
@@ -649,7 +706,7 @@ class Interface(ConfigurationElement):
                         self.ip_address = None
                         self.parser = Parser()
 
-                    @ConfigurationElement.preprocess_deactivated_object
+                    @ConfigurationElement.preprocess_object_init
                     def init_from_list(self, int_index, lst_src, **kwargs):
                         if len(lst_src) < 1:
                             raise Exception
@@ -662,7 +719,7 @@ class Interface(ConfigurationElement):
                             self.value = None
                             self.parser = Parser()
 
-                        @ConfigurationElement.preprocess_deactivated_object
+                        @ConfigurationElement.preprocess_object_init
                         def init_from_list(self, int_index, lst_src, **kwargs):
                             self.value = IP()
                             self.value.init_address(lst_src[0][int_index - 1])
@@ -687,7 +744,7 @@ class Interface(ConfigurationElement):
                     self.parser = Parser()
                     self.dict_vars_vals = OrderedDict()
 
-                @ConfigurationElement.preprocess_deactivated_object
+                @ConfigurationElement.preprocess_object_init
                 def init_from_list(self, int_index, lst_src, **kwargs):
                     dict_ret = self.parser.init_objects_from_list(
                         int_index, lst_src, {
@@ -697,12 +754,13 @@ class Interface(ConfigurationElement):
                             "sampling": ConfigurationElement.init_default_from_list(self),
                             "dhcp": ConfigurationElement.init_default_from_list(self),
                             "tcp-mss": ConfigurationElement.init_default_from_list(self),
+                            "policer": ConfigurationElement.init_default_from_list(self),
                         },
                         **kwargs)
 
                     if dict_ret:
                         for x in dict_ret:
-                            print("###"+x)
+                            print("###" + x)
                         pdb.set_trace()
 
                 def init_mtu_from_list(self, int_index, lst_src, **kwargs):
@@ -730,7 +788,7 @@ class Interface(ConfigurationElement):
                         self.value = None
                         self.parser = Parser()
 
-                    @ConfigurationElement.preprocess_deactivated_object
+                    @ConfigurationElement.preprocess_object_init
                     def init_from_list(self, int_index, lst_src, **kwargs):
                         if len(lst_src) < 1:
                             raise Exception
@@ -743,7 +801,7 @@ class Interface(ConfigurationElement):
                             self.value = None
                             self.parser = Parser()
 
-                        @ConfigurationElement.preprocess_deactivated_object
+                        @ConfigurationElement.preprocess_object_init
                         def init_from_list(self, int_index, lst_src, **kwargs):
                             self.value = IP()
                             self.value.init_address(lst_src[0][int_index - 1])
@@ -768,7 +826,7 @@ class Interface(ConfigurationElement):
                 def __init__(self):
                     self.parser = Parser()
 
-                @ConfigurationElement.preprocess_deactivated_object
+                @ConfigurationElement.preprocess_object_init
                 def init_from_list(self, int_index, lst_src, **kwargs):
                     dict_ret = self.parser.init_objects_from_list(
                         int_index, lst_src, {
@@ -782,9 +840,10 @@ class Interface(ConfigurationElement):
 
             class EthernetSwitching(ConfigurationElement):
                 def __init__(self):
+                    super().__init__()
                     self.parser = Parser()
 
-                @ConfigurationElement.preprocess_deactivated_object
+                @ConfigurationElement.preprocess_object_init
                 def init_from_list(self, int_index, lst_src, **kwargs):
                     self.lst_src = lst_src
                     dict_ret = self.parser.init_objects_from_list(
@@ -793,6 +852,7 @@ class Interface(ConfigurationElement):
                             "filter": ConfigurationElement.init_default_from_list(self),
                             "interface-mode": ConfigurationElement.init_default_from_list(self),
                             "port-mode": self.init_port_mode_form_list,
+                            "storm-control": ConfigurationElement.init_default_from_list(self),
                         },
                         **kwargs)
 
@@ -807,11 +867,12 @@ class Interface(ConfigurationElement):
 
                 class PortMode(ConfigurationElement):
                     def __init__(self):
+                        super().__init__()
                         self.access = None
                         self.trunk = None
                         self.parser = Parser()
 
-                    @ConfigurationElement.preprocess_deactivated_object
+                    @ConfigurationElement.preprocess_object_init
                     def init_from_list(self, int_index, lst_src, **kwargs):
                         dict_ret = self.parser.init_objects_from_list(
                             int_index, lst_src, {
@@ -833,7 +894,13 @@ class Interface(ConfigurationElement):
                         self.trunk = self.__class__.Trunk()
                         self.trunk.init_from_list(int_index, lst_src, **kwargs)
 
-                    def merge(self, object_other, lst_ignore = ["lst_src"], dict_merge_options={}):
+                    def merge(self, object_other, lst_ignore=None, dict_merge_options=None):
+                        if dict_merge_options is None:
+                            dict_merge_options = {}
+
+                        if lst_ignore is None:
+                            lst_ignore = ["lst_src"]
+
                         dict_merge_options["access"] = self.merge_access
                         dict_merge_options["trunk"] = self.merge_trunk
                         self.merge_base(object_other, lst_ignore=lst_ignore, dict_merge_options=dict_merge_options)
@@ -846,10 +913,11 @@ class Interface(ConfigurationElement):
 
                     class Access(ConfigurationElement):
                         def __init__(self):
+                            super().__init__()
                             self.parser = Parser()
                             self.value = None
 
-                        @ConfigurationElement.preprocess_deactivated_object
+                        @ConfigurationElement.preprocess_object_init
                         def init_from_list(self, int_index, lst_src, **kwargs):
                             dict_ret = self.parser.init_objects_from_list(
                                 int_index, lst_src, {
@@ -871,10 +939,11 @@ class Interface(ConfigurationElement):
 
                     class Trunk(ConfigurationElement):
                         def __init__(self):
+                            super().__init__()
                             self.parser = Parser()
                             self.value = None
 
-                        @ConfigurationElement.preprocess_deactivated_object
+                        @ConfigurationElement.preprocess_object_init
                         def init_from_list(self, int_index, lst_src, **kwargs):
                             dict_ret = self.parser.init_objects_from_list(
                                 int_index, lst_src, {
@@ -946,12 +1015,27 @@ class InterfaceVlan(Interface):
         super().__init__()
 
 
+class InterfaceReth(Interface):
+    def __init__(self):
+        super().__init__()
+
+
+class InterfaceFab(Interface):
+    def __init__(self):
+        super().__init__()
+
+
 class InterfaceVME(Interface):
     def __init__(self):
         super().__init__()
 
 
 class InterfaceME(Interface):
+    def __init__(self):
+        super().__init__()
+
+
+class InterfaceEM(Interface):
     def __init__(self):
         super().__init__()
 
@@ -978,8 +1062,9 @@ class InterfaceInterRange(Interface):
             rng.init_from_list(int_index + 1, lst_lines, **kwargs)
             self.ranges.append(rng)
 
-    class Range:
+    class Range(ConfigurationElement):
         def __init__(self, str_name):
+            super().__init__()
             self.name = str_name
             self.parser = Parser()
             self.lst_str_members = []
@@ -1022,12 +1107,12 @@ class InterfaceInterRange(Interface):
         def init_members_from_names(self, int_index, lst_inter_names, **kwargs):
             for str_inter_name in lst_inter_names:
                 lst_found = self.parser.get_objects_by_values({"name": str_inter_name}, self.lst_str_members,
-                                                                  int_limit=1)
+                                                              int_limit=1)
                 if lst_found:
                     raise Exception
 
                 lst_found = self.parser.get_objects_by_values({"name": str_inter_name}, kwargs["lst_interfaces"],
-                                                                int_limit=1)
+                                                              int_limit=1)
                 if lst_found:
                     self.lst_inited_members += lst_found
                     continue
@@ -1088,7 +1173,7 @@ class InterfaceInterRange(Interface):
 
                 lst_ret = list(map(lambda x: "%s-%s/%s/%s" %
                                              (str_prefix_start, lst_inter_triple_start[0], lst_inter_triple_start[1], x)
-                                   , range(int(lst_inter_triple_start[2]), int(lst_inter_triple_end[2])+1)))
+                                   , range(int(lst_inter_triple_start[2]), int(lst_inter_triple_end[2]) + 1)))
             else:
                 raise Exception
 
@@ -1104,6 +1189,7 @@ class InterfaceInterRange(Interface):
                 inter_new.name = interface.name
                 interface.merge(inter_new)
                 self.lst_members.append(interface)
+
 
 class JuniperBaseDevice(object):
     def __init__(self):
@@ -1123,7 +1209,7 @@ class JuniperBaseDevice(object):
             "forwarding-options": ConfigurationElement.init_default_from_list(self),
             "event-options": ConfigurationElement.init_default_from_list(self),
             "routing-options": ConfigurationElement.init_default_from_list(self),
-            "protocols": self.init_protocols_from_list,
+            "protocols": ConfigurationElement.init_default_from_list(self),
             "policy-options": ConfigurationElement.init_default_from_list(self),
             "firewall": ConfigurationElement.init_default_from_list(self),
             "routing-instances": ConfigurationElement.init_default_from_list(self),
@@ -1136,6 +1222,8 @@ class JuniperBaseDevice(object):
             "ethernet-switching-options": ConfigurationElement.init_default_from_list(self),
             "class-of-service": ConfigurationElement.init_default_from_list(self),
             "poe": ConfigurationElement.init_default_from_list(self),
+            "applications": ConfigurationElement.init_default_from_list(self),
+            "accounting-options": ConfigurationElement.init_default_from_list(self),
             "logical-systems": ConfigurationElement.init_default_from_list(self),
         }
 
@@ -1149,13 +1237,15 @@ class JuniperBaseDevice(object):
                 return 0
             return 1
 
-        self.parser.init_objects_from_list(int_index, lst_src, self.dict_func_inits, func_key=func_key)
+        dict_ret = self.parser.init_objects_from_list(int_index, lst_src, self.dict_func_inits, func_key=func_key)
+        if dict_ret:
+            pdb.set_trace()
 
     def init_groups_from_list(self, int_index, lst_src, **kwargs):
         dict_src = self.parser.split_list_to_dict(int_index, lst_src)
         for str_name, lst_lines in dict_src.items():
             grp = self.__class__.Group()
-            grp.init_from_list(int_index+1, lst_lines)
+            grp.init_from_list(int_index + 1, lst_lines)
             self.groups.append(grp)
 
     def init_configuration_from_list(self, int_index, lst_src, **kwargs):
@@ -1167,18 +1257,6 @@ class JuniperBaseDevice(object):
 
         lst_src = lst_src[0]
         self.version = lst_src[2]
-
-    def init_apply_groups_from_list(self, lst_src):
-        pdb.set_trace()
-
-    def init_system_from_list(self, lst_src):
-        pdb.set_trace()
-
-    def init_chassis_from_list(self, lst_src):
-        pdb.set_trace()
-
-    def init_services_from_list(self, lst_src):
-        pdb.set_trace()
 
     def init_interfaces_from_list(self, int_index, lst_src, **kwargs):
         dict_src = self.parser.split_list_to_dict(int_index, lst_src)
@@ -1233,27 +1311,20 @@ class JuniperBaseDevice(object):
     def init_bgp_from_list(self, int_index, lst_src, **kwargs):
         pdb.set_trace()
 
-    def init_policy_options_from_list(self, lst_src):
-        pdb.set_trace()
-
-    def init_firewall_from_list(self, lst_src):
-        pdb.set_trace()
-
-    def init_routing_instances_from_list(self, lst_src):
-        pdb.set_trace()
-
     class Group(ConfigurationElement):
         def __init__(self):
+            super().__init__()
             self.name = None
             self.parser = Parser()
 
-        @ConfigurationElement.preprocess_deactivated_object
+        @ConfigurationElement.preprocess_object_init
         def init_from_list(self, int_index, lst_src, **kwargs):
-            self.name = lst_src[0][int_index-1]
+            self.name = lst_src[0][int_index - 1]
             self.lst_src = lst_src
 
-    class Protocols:
+    class Protocols(ConfigurationElement):
         def __init__(self):
+            super().__init__()
             self.parser = Parser()
 
         def init_from_list(self, int_index, lst_src, **kwargs):
@@ -1273,6 +1344,9 @@ class JuniperBaseDevice(object):
                     "igmp": ConfigurationElement.init_default_from_list(self),
                     "mld": ConfigurationElement.init_default_from_list(self),
                     "bfd": ConfigurationElement.init_default_from_list(self),
+                    "sflow": ConfigurationElement.init_default_from_list(self),
+                    "stp": ConfigurationElement.init_default_from_list(self),
+                    "oam": ConfigurationElement.init_default_from_list(self),
                 },
                 **kwargs
             )
@@ -1289,6 +1363,7 @@ class JuniperBaseDevice(object):
 
         class Bgp(ConfigurationElement):
             def __init__(self):
+                super().__init__()
                 self.parser = Parser()
                 self.groups = []
 
@@ -1298,6 +1373,7 @@ class JuniperBaseDevice(object):
                     {
                         "traceoptions": ConfigurationElement.init_default_from_list(self),
                         "group": self.init_group_from_list,
+                        "precision-timers": self.init_group_from_list,
                     },
                     **kwargs
                 )
@@ -1319,7 +1395,7 @@ class JuniperBaseDevice(object):
                     self.bool_active = True
                     self.neighbors = []
 
-                @ConfigurationElement.preprocess_deactivated_object
+                @ConfigurationElement.preprocess_object_init
                 def init_from_list(self, int_index, lst_src, **kwargs):
                     dict_ret = self.parser.init_objects_from_list(
                         int_index, lst_src,
@@ -1371,7 +1447,7 @@ class JuniperBaseDevice(object):
                         self.parser = Parser()
                         self.bool_active = True
 
-                    @ConfigurationElement.preprocess_deactivated_object
+                    @ConfigurationElement.preprocess_object_init
                     def init_from_list(self, int_index, lst_src, **kwargs):
                         dict_ret = self.parser.init_objects_from_list(
                             int_index, lst_src,
@@ -1389,6 +1465,9 @@ class JuniperBaseDevice(object):
                                 'export': ConfigurationElement.init_default_from_list(self),
                                 'peer-as': ConfigurationElement.init_default_from_list(self),
                                 'traceoptions': ConfigurationElement.init_default_from_list(self),
+                                'remove-private': ConfigurationElement.init_default_from_list(self),
+                                'as-override': ConfigurationElement.init_default_from_list(self),
+                                'multihop': ConfigurationElement.init_default_from_list(self),
                             },
                             **kwargs
                         )
@@ -1421,10 +1500,13 @@ class JuniperBaseDevice(object):
         GR = InterfaceGR
         AE = InterfaceAE
         ME = InterfaceME
+        EM = InterfaceEM
         LT = InterfaceLT
         IRB = InterfaceIRB
         ET = InterfaceET
         ST = InterfaceST
         VLAN = InterfaceVlan
+        RETH = InterfaceReth
+        FAB = InterfaceFab
         VME = InterfaceVME
         INTERFACE_RANGE = InterfaceInterRange
