@@ -1,10 +1,19 @@
 import pdb
+import sys
+import os
 import re
+
+str_top_path = os.path.realpath(os.path.join(os.path.join(os.path.join(os.path.realpath(__file__), ".."), ".."), ".."))
+
+
+sys.path.insert(0, os.path.realpath(os.path.join(os.path.join(str_top_path, "IP"), "src")))
+
 
 from collections import OrderedDict
 from enum import Enum
 
-from src.ip import IP
+
+from ip import IP
 from src.parser import Parser
 from src.h_logger import HLogger
 
